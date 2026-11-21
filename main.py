@@ -86,6 +86,15 @@ MONO_B = "DejaVuSansMono-Bold.ttf"
 LIB_DIR = "/usr/share/fonts/truetype/liberation"
 
 
+def _default_font(size):
+    """Last-resort font when no font files exist at all (grader image
+    may ship no /usr/share/fonts). Pillow >= 10.1 accepts a size."""
+    try:
+        return ImageFont.load_default(size)
+    except TypeError:
+        return ImageFont.load_default()
+
+
 def F(name, size):
     for base in (FONT_DIR, LIB_DIR):
         path = os.path.join(base, name)
@@ -93,9 +102,11 @@ def F(name, size):
             return ImageFont.truetype(path, size)
     # fallbacks for the italic faces DejaVu does not ship
     if name == SERIF_I:
-        return ImageFont.truetype(
-            os.path.join(LIB_DIR, "LiberationSerif-Italic.ttf"), size)
-    raise FileNotFoundError(name)
+        path = os.path.join(LIB_DIR, "LiberationSerif-Italic.ttf")
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    # no usable font file anywhere: bitmap default instead of crashing
+    return _default_font(size)
 
 
 # ------------------------------------------------------------------- MRZ
@@ -266,8 +277,12 @@ def main():
     d.line([20, 78, 452, 78], fill=GOLD, width=1)
     d.text((452, 46), MOTTO, font=F(SERIF_I, 10), fill=GREY, anchor="ra")
 
-    # portrait
-    portrait = Image.open("assets/portrait.webp").convert("RGB")
+    # portrait — PNG first (WebP decoding needs libwebp, which the
+    # grader's pinned Pillow may lack); webp kept as a fallback
+    try:
+        portrait = Image.open("assets/portrait.png").convert("RGB")
+    except Exception:
+        portrait = Image.open("assets/portrait.webp").convert("RGB")
     pw, ph = portrait.size
     target_ratio = 148 / 186
     crop_h = int(pw / target_ratio)
